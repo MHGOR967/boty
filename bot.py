@@ -1,216 +1,179 @@
 
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, MessageEntity
+import asyncio
+import sys
+import subprocess
 import json
 import os
 
-TOKEN = '8866684441:AAFrzPZztyUjkgby3FeFySFWnZJauSHEbY0'
+try:
+    import aiogram
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "aiogram"])
+    import aiogram
+
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.client.default import DefaultBotProperties
+from aiogram.filters import CommandStart, Command
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+TOKEN = "8866684441:AAFrzPZztyUjkgby3FeFySFWnZJauSHEbY0"
 ADMIN_ID = 5653088167
+CONFIG_FILE = "bot_config.json"
+WEBAPP_URL = "https://your-webapp-domain.com" # استبدله برابط موقعك على Render مثلاً fokhm.com
 
-bot = telebot.TeleBot(TOKEN)
-WEBAPP_URL = 'https://your-webapp-domain.com'
-SETTINGS_FILE = 'bot_settings.json'
+class AdminState(StatesGroup):
+    waiting_for_welcome_message = State()
+    waiting_for_buttons = State()
 
-default_settings = {
-    "welcome_message": "🏴‍☠️ أهلاً بك يا فخم في نظام g5wbot الماسي\n--------------------------------------------------\n🔥 بوابة تلغيم، تخصيص وتوقيع تطبيقات الاختراق والأمان باحترافية تامة.\n--------------------------------------------------\n⏳ حالة الحساب: مفعل ومؤمن بالكامل عبر منصة fokhm.com ⚡\n--------------------------------------------------\nاختر إحدى الخدمات أدناه للبدء فوراً:",
-    "welcome_entities": [],
-    "btn_inject": "⚡ حقن وتلغيم تطبيق",
-    "btn_account": "🥷 حسابي وVIP",
-    "btn_invite": "🔗 دعوة صديق (ربح)",
-    "btn_site": "🌐 موقع وهم الرسمي"
-}
-
-def load_settings():
-    if os.path.exists(SETTINGS_FILE):
+def load_config():
+    if os.path.exists(CONFIG_FILE):
         try:
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except:
-            return default_settings
-    return default_settings
+            pass
+    return {
+        "welcome_message": (
+            "🏴‍☠️ <b>أهلاً بك يا فخم في نظام g5wbot الماسي</b>\n"
+            "--------------------------------------------------\n"
+            "🔥 <b>بوابة تلغيم، تخصيص وتوقيع تطبيقات الاختراق وأمان الهواتف.</b>\n"
+            "--------------------------------------------------\n"
+            "⏳ <b>حالة الحساب:</b> مفعل ومؤمن بالكامل عبر منصة fokhm.com ⚡\n"
+            "--------------------------------------------------\n"
+            "اختر إحدى الخدمات أدناه للبدء فوراً:"
+        ),
+        "buttons": [
+            {"text": "⚡ حقن وتلغيم تطبيق", "callback_data": "inject_action", "icon_custom_emoji_id": None},
+            {"text": "🥷 حسابي وVIP", "callback_data": "my_account", "icon_custom_emoji_id": None},
+            {"text": "🔗 دعوة صديق (ربح)", "callback_data": "invite_friends", "icon_custom_emoji_id": None},
+            {"text": "🌐 موقع فخم الرسمي", "callback_data": "fokhm_site", "icon_custom_emoji_id": None}
+        ]
+    }
 
-def save_settings(settings):
-    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, ensure_ascii=False, indent=4)
+def save_config(config):
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(config, f, ensure_ascii=False, indent=4)
 
-def dict_to_entities(ent_dicts):
-    if not ent_dicts:
-        return None
-    entities = []
-    for ed in ent_dicts:
-        ent = MessageEntity(
-            type=ed.get('type'),
-            offset=ed.get('offset'),
-            length=ed.get('length'),
-            url=ed.get('url'),
-            user=ed.get('user'),
-            language=ed.get('language'),
-            custom_emoji_id=ed.get('custom_emoji_id')
-        )
-        entities.append(ent)
-    return entities
+config = load_config()
 
-def get_main_keyboard(user_id):
-    settings = load_settings()
-    markup = InlineKeyboardMarkup(row_width=2)
-    
-    btn_inject = InlineKeyboardButton(settings["btn_inject"], web_app=telebot.types.WebAppInfo(url=WEBAPP_URL))
-    btn_account = InlineKeyboardButton(settings["btn_account"], callback_data="my_account")
-    btn_invite = InlineKeyboardButton(settings["btn_invite"], callback_data="invite_friends")
-    btn_site = InlineKeyboardButton(settings["btn_site"], url="https://fokhm.com")
-    
-    markup.add(btn_inject)
-    markup.add(btn_account, btn_invite)
-    markup.add(btn_site)
-    
-    if user_id == ADMIN_ID:
-        btn_admin = InlineKeyboardButton("🛠 لوحة تحكم الآدمن", callback_data="admin_panel")
-        markup.add(btn_admin)
+def parse_message_with_emojis(message: types.Message):
+    text = message.html_text
+    text = text.replace("<emoji ", "<tg-emoji ").replace("</emoji>", "</tg-emoji>")
+    return text
+
+async def start_bot():
+    bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+    dp = Dispatcher()
+
+    @dp.message(CommandStart())
+    async def handle_start(message: types.Message):
+        user_id = message.from_user.id
+        builder = InlineKeyboardBuilder()
         
-    return markup
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    user_id = message.from_user.id
-    first_name = message.from_user.first_name
-    settings = load_settings()
-    
-    welcome_text = settings.get("welcome_message", "")
-    ent_dicts = settings.get("welcome_entities", [])
-    entities = dict_to_entities(ent_dicts)
-    
-    personalized_msg = f"👋 أهلاً بك يا {first_name}!\n\n{welcome_text}"
-    
-    try:
-        bot.send_message(
-            message.chat.id,
-            personalized_msg,
-            entities=entities,
-            reply_markup=get_main_keyboard(user_id)
-        )
-    except Exception:
-        bot.send_message(
-            message.chat.id,
-            personalized_msg,
-            reply_markup=get_main_keyboard(user_id)
-        )
-
-@bot.message_handler(commands=['admin'])
-def admin_command(message):
-    if message.from_user.id != ADMIN_ID:
-        bot.send_message(message.chat.id, "❌ هذا الأمر مخصص للآدمن فقط يا فخم.")
-        return
+        # زر الحقن الموجه للـ Web App
+        builder.row(types.InlineKeyboardButton(
+            text=config["buttons"][0]["text"],
+            web_app=types.WebAppInfo(url=WEBAPP_URL),
+            icon_custom_emoji_id=config["buttons"][0].get("icon_custom_emoji_id")
+        ))
         
-    markup = InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        InlineKeyboardButton("📝 تعديل رسالة الترحيب", callback_data="set_welcome"),
-        InlineKeyboardButton("🔘 تعديل أسماء الأزرار", callback_data="set_buttons"),
-        InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_home")
-    )
-    bot.send_message(
-        message.chat.id,
-        "🛠 <b>لوحة تحكم الآدمن الماسية (fokhm.com):</b>\n\nاختر ما تريد تعديله لإضافة إيموجياتك المميزة:",
-        parse_mode='HTML'
-    )
+        # باقي الأزرار
+        for btn_data in config["buttons"][1:]:
+            builder.row(types.InlineKeyboardButton(
+                text=btn_data["text"],
+                callback_data=btn_data["callback_data"],
+                icon_custom_emoji_id=btn_data.get("icon_custom_emoji_id")
+            ))
+            
+        try:
+            await message.answer(
+                config["welcome_message"],
+                reply_markup=builder.as_markup()
+            )
+        except Exception as e:
+            print(f"Error sending welcome message: {e}")
+            await message.answer(config["welcome_message"])
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_handler(call):
-    user_id = call.from_user.id
-    
-    if call.data == "my_account":
-        bot.answer_callback_query(call.id)
-        bot.send_message(
-            call.message.chat.id,
-            f"🥷 معلومات حسابك الشخصي:\n\n🆔 المعرّف (ID): {user_id}\n⚡ الحالة: عضو مميز في شبكة g5wbot\n🌐 المنصة: fokhm.com"
+    @dp.message(Command("admin"), F.from_user.id == ADMIN_ID)
+    async def admin_panel(message: types.Message):
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📝 تعديل رسالة الترحيب", callback_data="edit_welcome")
+        builder.button(text="🔘 تعديل أسماء الأزرار", callback_data="edit_buttons")
+        builder.adjust(1)
+        await message.answer("🛠 <b>لوحة تحكم الآدمن الماسية (fokhm.com):</b>\nاختر ما تريد تعديله:", reply_markup=builder.as_markup())
+
+    @dp.callback_query(F.data == "edit_welcome", F.from_user.id == ADMIN_ID)
+    async def edit_welcome_callback(callback_query: types.CallbackQuery, state: FSMContext):
+        await callback_query.message.edit_text("✍️ أرسل رسالة الترحيب الجديدة مع إيموجياتك المميزة (بريميوم):")
+        await state.set_state(AdminState.waiting_for_welcome_message)
+        await callback_query.answer()
+
+    @dp.message(AdminState.waiting_for_welcome_message, F.from_user.id == ADMIN_ID)
+    async def process_new_welcome(message: types.Message, state: FSMContext):
+        global config
+        config["welcome_message"] = parse_message_with_emojis(message)
+        save_config(config)
+        await message.answer("✅ تم تحديث رسالة الترحيب مع الإيموجي المميزة بنجاح يا فخم!")
+        await state.clear()
+        await admin_panel(message)
+
+    @dp.callback_query(F.data == "edit_buttons", F.from_user.id == ADMIN_ID)
+    async def edit_buttons_callback(callback_query: types.CallbackQuery, state: FSMContext):
+        await callback_query.message.edit_text(
+            "🔘 أرسل أسماء الأزرار الأربعة الجديدة مفصولة بفاصلة `,` بالشكل التالي:\n\n"
+            "<code>زر الحقن,زر الحساب,زر الدعوة,زر الموقع</code>\n\n"
+            "ملاحظة: يمكنك إرسال رموز تعبيرية مميزة بجانب الاسم."
         )
-        
-    elif call.data == "invite_friends":
-        bot.answer_callback_query(call.id)
+        await state.set_state(AdminState.waiting_for_buttons)
+        await callback_query.answer()
+
+    @dp.message(AdminState.waiting_for_buttons, F.from_user.id == ADMIN_ID)
+    async def process_new_buttons(message: types.Message, state: FSMContext):
+        global config
+        parts = message.text.split(',')
+        if len(parts) >= 4:
+            for i in range(min(4, len(parts))):
+                custom_emoji_id = None
+                if message.entities:
+                    for entity in message.entities:
+                        if entity.type == "custom_emoji":
+                            custom_emoji_id = entity.custom_emoji_id
+                            break
+                config["buttons"][i]["text"] = parts[i].strip()
+                if custom_emoji_id:
+                    config["buttons"][i]["icon_custom_emoji_id"] = custom_emoji_id
+            save_config(config)
+            await message.answer("✅ تم تحديث الأزرار بنجاح يا فخم!")
+        else:
+            await message.answer("❌ الصيغة خاطئة. تأكد من إرسال 4 أسماء مفصولة بـ `,`.")
+        await state.clear()
+        await admin_panel(message)
+
+    @dp.callback_query(F.data == "my_account")
+    async def callback_account(callback_query: types.CallbackQuery):
+        user_id = callback_query.from_user.id
+        await callback_query.answer()
+        await callback_query.message.answer(f"🥷 معلومات حسابك:\n🆔 المعرّف: <code>{user_id}</code>\n🌐 المنصة: fokhm.com")
+
+    @dp.callback_query(F.data == "invite_friends")
+    async def callback_invite(callback_query: types.CallbackQuery):
+        user_id = callback_query.from_user.id
+        await callback_query.answer()
         invite_link = f"https://t.me/g5wbot/wahmapk?startapp=ref_{user_id}"
-        bot.send_message(
-            call.message.chat.id,
-            f"🔗 نظام دعوة الأعضاء (g5wbot):\n\nشارك رابطك الخاص أدناه مع أصدقائك. عند دعوة 5 أشخاص عبر الـ Web App، سيتم تفعيل الصنع اللانهائي لحسابك فوراً:\n\n{invite_link}"
-        )
-        
-    elif call.data == "admin_panel" and user_id == ADMIN_ID:
-        bot.answer_callback_query(call.id)
-        markup = InlineKeyboardMarkup(row_width=1)
-        markup.add(
-            InlineKeyboardButton("📝 تعديل رسالة الترحيب", callback_data="set_welcome"),
-            InlineKeyboardButton("🔘 تعديل أسماء الأزرار", callback_data="set_buttons"),
-            InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_home")
-        )
-        bot.edit_message_text(
-            "🛠 لوحة تحكم الآدمن الماسية (fokhm.com):\n\nاختر ما تريد تعديله:",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=markup
-        )
-        
-    elif call.data == "set_welcome" and user_id == ADMIN_ID:
-        bot.answer_callback_query(call.id)
-        msg = bot.send_message(
-            call.message.chat.id,
-            "✍️ أرسل رسالة الترحيب الجديدة الآن مع إيموجياتك المميزة (سيتم التقاط الـ Entities وأيدي الملصقات تلقائياً):"
-        )
-        bot.register_next_step_handler(msg, save_new_welcome)
+        await callback_query.message.answer(f"🔗 نظام الدعوات:\nشارك رابطك:\n<code>{invite_link}</code>")
 
-    elif call.data == "set_buttons" and user_id == ADMIN_ID:
-        bot.answer_callback_query(call.id)
-        msg = bot.send_message(
-            call.message.chat.id,
-            "🔘 أرسل أسماء الأزرار الأربعة الجديدة مفصولة بفاصلة `,` بالشكل التالي:\n\n`زر الحقن,زر الحساب,زر الدعوة,زر الموقع`"
-        )
-        bot.register_next_step_handler(msg, save_new_buttons)
+    @dp.callback_query(F.data == "fokhm_site")
+    async def callback_site(callback_query: types.CallbackQuery):
+        await callback_query.answer("🌐 موقع فخم الرسمي: https://fokhm.com", show_alert=True)
 
-    elif call.data == "back_home":
-        bot.answer_callback_query(call.id)
-        settings = load_settings()
-        bot.edit_message_text(
-            f"👋 القائمة الرئيسية:\n\n" + settings["welcome_message"],
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=get_main_keyboard(user_id)
-        )
+    @dp.callback_query()
+    async def handle_other_callbacks(callback_query: types.CallbackQuery):
+        await callback_query.answer()
 
-def save_new_welcome(message):
-    if message.from_user.id != ADMIN_ID:
-        return
-    
-    text = message.text or message.caption or ""
-    raw_entities = message.json.get('entities') or message.json.get('caption_entities') or []
-    
-    entities_list = []
-    for ent in raw_entities:
-        entities_list.append({
-            "type": ent.get("type"),
-            "offset": ent.get("offset"),
-            "length": ent.get("length"),
-            "custom_emoji_id": ent.get("custom_emoji_id")
-        })
-        
-    settings = load_settings()
-    settings["welcome_message"] = text
-    settings["welcome_entities"] = entities_list
-    save_settings(settings)
-    
-    bot.send_message(message.chat.id, "✅ تم حفظ رسالة الترحيب مع الإيموجي المميزة بنجاح يا فخم!", reply_markup=get_main_keyboard(ADMIN_ID))
+    print("🤖 Aiogram Bot with full Custom Emoji support is running...")
+    await dp.start_polling(bot)
 
-def save_new_buttons(message):
-    if message.from_user.id != ADMIN_ID:
-        return
-    parts = message.text.split(',')
-    if len(parts) == 4:
-        settings = load_settings()
-        settings["btn_inject"] = parts[0].strip()
-        settings["btn_account"] = parts[1].strip()
-        settings["btn_invite"] = parts[2].strip()
-        settings["btn_site"] = parts[3].strip()
-        save_settings(settings)
-        bot.send_message(message.chat.id, "✅ تم تحديث أسماء الأزرار بنجاح يا زعيم!", reply_markup=get_main_keyboard(ADMIN_ID))
-    else:
-        bot.send_message(message.chat.id, "❌ الصيغة غير صحيحة. تأكد من إرسال 4 أسماء مفصولة بـ `,`.", reply_markup=get_main_keyboard(ADMIN_ID))
-
-if __name__ == '__main__':
-    print(f"🤖 Bot with Custom Emoji entities support is running for {ADMIN_ID}...")
-    bot.infinity_polling()
+if __name__ == "__main__":
+    asyncio.run(start_bot())
