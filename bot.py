@@ -23,7 +23,7 @@ TOKEN = "8866684441:AAFrzPZztyUjkgby3FeFySFWnZJauSHEbY0"
 ADMIN_ID = 5653088167
 CONFIG_FILE = "bot_config.json"
 DB_FILE = "fokhm_bot.db"
-WEBAPP_URL = "https://your-webapp-domain.com" # استبدله برابط موقعك على Render مثلاً fokhm.com
+WEBAPP_URL = "https://fokhm.com"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -124,22 +124,18 @@ def get_main_keyboard():
     b = config["buttons"]
     builder = InlineKeyboardBuilder()
     
-    # السطر الأول: حقن وتلغيم تطبيق (مستقل لوحده)
     builder.row(types.InlineKeyboardButton(
         text=b.get("inject", "⚡ حقن وتلغيم تطبيق"),
         web_app=types.WebAppInfo(url=WEBAPP_URL)
     ))
-    # السطر الثاني: معلومات حسابي + دعوة صديق
     builder.row(
         types.InlineKeyboardButton(text=b.get("account", "🥷 معلومات حسابي"), callback_data="my_account"),
         types.InlineKeyboardButton(text=b.get("invite", "🔗 دعوة صديق (ربح)"), callback_data="invite_friends")
     )
-    # السطر الثالث: قسم VIP + مساعدة
     builder.row(
         types.InlineKeyboardButton(text=b.get("vip", "💎 قسم VIP"), callback_data="vip_section"),
         types.InlineKeyboardButton(text=b.get("help", "❓ مساعدة"), callback_data="help_section")
     )
-    # السطر الرابع: تبرع للبوت
     builder.row(types.InlineKeyboardButton(
         text=b.get("donate", "⭐ تبرع للبوت"),
         callback_data="start_donation"
@@ -202,19 +198,20 @@ async def start_bot():
         builder.button(text="📊 إحصائيات البوت", callback_data="admin_stats")
         builder.button(text="📝 تعديل رسالة الترحيب", callback_data="edit_welcome")
         builder.button(text="🔘 تعديل أسماء الأزرار", callback_data="edit_buttons")
-        builder.button(text="📢 إذاعة عامة للأعضاء", callback_data="admin_broadcast")
         builder.adjust(1)
         await message.answer("🛠 <b>لوحة تحكم الآدمن الماسية (fokhm.com):</b>\nاختر القسم المطلوب:", reply_markup=builder.as_markup())
 
     @dp.callback_query(F.data == "admin_stats", F.from_user.id == ADMIN_ID)
     async def admin_stats(callback_query: types.CallbackQuery):
         total_users = get_total_users_count()
+        b = InlineKeyboardBuilder()
+        b.button(text="🔙 رجوع", callback_data="back_to_admin")
         await callback_query.message.edit_text(
             f"📊 <b>إحصائيات بوت fokhm.com:</b>\n\n"
             f"👥 إجمالي المشتركين: <b>{total_users}</b> عضو\n"
             f"⚡ حالة الخادم: يعمل بكفاءة عالية (Aiogram 3)\n"
             f"👑 المشرف العام: <code>{ADMIN_ID}</code>",
-            reply_markup=builder_back_admin()
+            reply_markup=b.as_markup()
         )
         await callback_query.answer()
 
@@ -257,24 +254,12 @@ async def start_bot():
         await state.clear()
         await admin_panel(message)
 
-    @dp.callback_query(F.data == "admin_broadcast", F.from_user.id == ADMIN_ID)
-    async def admin_broadcast_prompt(callback_query: types.CallbackQuery, state: FSMContext):
-        await callback_query.message.edit_text("📢 أرسل نص الإذاعة أو الإعلان الذي تريد إرساله لجميع الأعضاء دفعة واحدة:")
-        # يمكنك إضافة ستيت للإذاعة هنا
-        await callback_query.answer()
-
-    def builder_back_admin():
-        b = InlineKeyboardBuilder()
-        b.button(text="🔙 رجوع للوحة التحكم", callback_data="back_to_admin")
-        return b.as_markup()
-
     @dp.callback_query(F.data == "back_to_admin", F.from_user.id == ADMIN_ID)
     async def back_to_admin(callback_query: types.CallbackQuery):
         await callback_query.message.delete()
         await admin_panel(callback_query.message)
         await callback_query.answer()
 
-    # نظام التبرع بالنجوم الفوري والصاروخي
     @dp.callback_query(F.data == "start_donation")
     async def start_donation(callback_query: types.CallbackQuery, state: FSMContext):
         await state.update_data(donation_amount="5")
@@ -312,7 +297,6 @@ async def start_bot():
                 f"تتم عملية الدفع الآمن بقيمة <b>{amount}</b> نجمة (Telegram Stars) عبر تليجرام فوراً.",
                 reply_markup=get_main_keyboard()
             )
-            # توليد الفاتورة فوراً وبدون أي تأخير
             await bot.send_invoice(
                 chat_id=callback_query.message.chat.id,
                 title="تبرع لدعم منصة fokhm.com ⚡",
