@@ -1,25 +1,23 @@
 
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, MessageEntity
 import json
 import os
 
 TOKEN = '8866684441:AAFrzPZztyUjkgby3FeFySFWnZJauSHEbY0'
 ADMIN_ID = 5653088167
 
-# استخدام HTML لضمان قبول الإيموجي المميزة وكیانات تليجرام البريميوم بدقة
-bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
+bot = telebot.TeleBot(TOKEN)
 WEBAPP_URL = 'https://your-webapp-domain.com'
-
 SETTINGS_FILE = 'bot_settings.json'
 
 default_settings = {
-    "welcome_message": "🏴‍☠️ <b>أهلاً بك يا فخم في نظام g5wbot الماسي</b>\n--------------------------------------------------\n🔥 <b>بوابة تلغيم، تخصيص وتوقيع تطبيقات الاختراق والأمان باحترافية تامة.</b>\n--------------------------------------------------\n⏳ <b>حالة الحساب:</b> مفعل ومؤمن بالكامل عبر منصة fokhm.com ⚡\n--------------------------------------------------\nاختر إحدى الخدمات أدناه للبدء فوراً:",
+    "welcome_message": "🏴‍☠️ أهلاً بك يا فخم في نظام g5wbot الماسي\n--------------------------------------------------\n🔥 بوابة تلغيم، تخصيص وتوقيع تطبيقات الاختراق والأمان باحترافية تامة.\n--------------------------------------------------\n⏳ حالة الحساب: مفعل ومؤمن بالكامل عبر منصة fokhm.com ⚡\n--------------------------------------------------\nاختر إحدى الخدمات أدناه للبدء فوراً:",
+    "welcome_entities": [], # لحفظ تفاصيل الإيموجي المميز والكيانات
     "btn_inject": "⚡ حقن وتلغيم تطبيق",
     "btn_account": "🥷 حسابي وVIP",
     "btn_invite": "🔗 دعوة صديق (ربح)",
-    "btn_site": "🌐 موقع فخم الرسمي"
-}
+    "btn_site": "🌐 موقع وهم فخم
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -33,6 +31,24 @@ def load_settings():
 def save_settings(settings):
     with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(settings, f, ensure_ascii=False, indent=4)
+
+def dict_to_entities(ent_dicts):
+    if not ent_dicts:
+        return None
+    entities = []
+    for ed in ent_dicts:
+        # بناء كائن MessageEntity بنفس هيكل تليجرام البرمجي
+        ent = MessageEntity(
+            type=ed.get('type'),
+            offset=ed.get('offset'),
+            length=ed.get('length'),
+            url=ed.get('url'),
+            user=ed.get('user'),
+            language=ed.get('language'),
+            custom_emoji_id=ed.get('custom_emoji_id')
+        )
+        entities.append(ent)
+    return entities
 
 def get_main_keyboard(user_id):
     settings = load_settings()
@@ -59,12 +75,27 @@ def send_welcome(message):
     first_name = message.from_user.first_name
     settings = load_settings()
     
-    personalized_msg = f"👋 أهلاً بك يا <b>{first_name}</b>!\n\n" + settings["welcome_message"]
-    bot.send_message(
-        message.chat.id,
-        personalized_msg,
-        reply_markup=get_main_keyboard(user_id)
-    )
+    welcome_text = settings.get("welcome_message", "")
+    ent_dicts = settings.get("welcome_entities", [])
+    entities = dict_to_entities(ent_dicts)
+    
+    personalized_msg = f"👋 أهلاً بك يا {first_name}!\n\n{welcome_text}"
+    
+    # إرسال الرسالة مع دعم الـ custom_emoji entities الحقيقية تماماً كما طلبته
+    try:
+        bot.send_message(
+            message.chat.id,
+            personalized_msg,
+            entities=entities,
+            reply_markup=get_main_keyboard(user_id)
+        )
+    except Exception:
+        # طريقة احتياطية في حال حدث أي خطأ بالكيانات
+        bot.send_message(
+            message.chat.id,
+            personalized_msg,
+            reply_markup=get_main_keyboard(user_id)
+        )
 
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
@@ -81,7 +112,7 @@ def admin_command(message):
     bot.send_message(
         message.chat.id,
         "🛠 <b>لوحة تحكم الآدمن الماسية (fokhm.com):</b>\n\nاختر ما تريد تعديله لإضافة إيموجياتك المميزة:",
-        reply_markup=markup
+        parse_mode='HTML'
     )
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -92,8 +123,7 @@ def callback_handler(call):
         bot.answer_callback_query(call.id)
         bot.send_message(
             call.message.chat.id,
-            f"🥷 <b>معلومات حسابك الشخصي:</b>\n\n🆔 المعرّف (ID): <code>{user_id}</code>\n⚡ الحالة: عضو مميز في شبكة g5wbot\n🌐 المنصة: fokhm.com",
-            parse_mode='HTML'
+            f"🥷 معلومات حسابك الشخصي:\n\n🆔 المعرّف (ID): {user_id}\n⚡ الحالة: عضو مميز في شبكة g5wbot\n🌐 المنصة: fokhm.com"
         )
         
     elif call.data == "invite_friends":
@@ -101,8 +131,7 @@ def callback_handler(call):
         invite_link = f"https://t.me/g5wbot/wahmapk?startapp=ref_{user_id}"
         bot.send_message(
             call.message.chat.id,
-            f"🔗 <b>نظام دعوة الأعضاء (g5wbot):</b>\n\nشارك رابطك الخاص أدناه مع أصدقائك. عند دعوة 5 أشخاص عبر الـ Web App، سيتم تفعيل الصنع اللانهائي لحسابك فوراً:\n\n<code>{invite_link}</code>",
-            parse_mode='HTML'
+            f"🔗 نظام دعوة الأعضاء (g5wbot):\n\nشارك رابطك الخاص أدناه مع أصدقائك. عند دعوة 5 أشخاص عبر الـ Web App، سيتم تفعيل الصنع اللانهائي لحسابك فوراً:\n\n{invite_link}"
         )
         
     elif call.data == "admin_panel" and user_id == ADMIN_ID:
@@ -114,7 +143,7 @@ def callback_handler(call):
             InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_home")
         )
         bot.edit_message_text(
-            "🛠 <b>لوحة تحكم الآدمن الماسية (fokhm.com):</b>\n\nاختر ما تريد تعديله لإضافة إيموجياتك المميزة:",
+            "🛠 لوحة تحكم الآدمن الماسية (fokhm.com):\n\nاختر ما تريد تعديله:",
             call.message.chat.id,
             call.message.message_id,
             reply_markup=markup
@@ -124,7 +153,7 @@ def callback_handler(call):
         bot.answer_callback_query(call.id)
         msg = bot.send_message(
             call.message.chat.id,
-            "✍️ أرسل النص الجديد لرسالة الترحيب الآن (مع إيموجياتك المميزة وبصيغة HTML لو أردت):"
+            "✍️ أرسل رسالة الترحيب الجديدة الآن مع إيموجياتك المميزة (سيتم التقاط الـ Entities وأيدي الملصقات تلقائياً):"
         )
         bot.register_next_step_handler(msg, save_new_welcome)
 
@@ -132,7 +161,7 @@ def callback_handler(call):
         bot.answer_callback_query(call.id)
         msg = bot.send_message(
             call.message.chat.id,
-            "🔘 أرسل أسماء الأزرار الأربعة الجديدة مفصولة بفاصلة `,` بالشكل التالي:\n\n<code>زر الحقن,زر الحساب,زر الدعوة,زر الموقع</code>"
+            "🔘 أرسل أسماء الأزرار الأربعة الجديدة مفصولة بفاصلة `,` بالشكل التالي:\n\n`زر الحقن,زر الحساب,زر الدعوة,زر الموقع`"
         )
         bot.register_next_step_handler(msg, save_new_buttons)
 
@@ -150,16 +179,26 @@ def save_new_welcome(message):
     if message.from_user.id != ADMIN_ID:
         return
     
-    # استخراج النص أو الكيانات (Entities) البرمجية لدعم الإيموجي المميزة والبريميوم بدقة
-    if message.content_type == 'text':
-        # استخدام html_text للحفاظ على الإيموجي المميزة وكيانات تليجرام
-        new_text = message.html_text if hasattr(message, 'html_text') else message.text
-        settings = load_settings()
-        settings["welcome_message"] = new_text
-        save_settings(settings)
-        bot.send_message(message.chat.id, "✅ <b>تم تحديث رسالة الترحيب مع الإيموجي المميزة بنجاح يا فخم!</b>", parse_mode='HTML', reply_markup=get_main_keyboard(ADMIN_ID))
-    else:
-        bot.send_message(message.chat.id, "❌ يجِب إرسال نص يحتوي على الكلمات والإيموجي المطلوبة.")
+    # استخراج النص والكيانات الأصلية (Entities) التي تحوي أيدي الملصق المميز
+    text = message.text or message.caption or ""
+    raw_entities = message.json.get('entities') or message.json.get('caption_entities') or []
+    
+    # تنظيف الـ entities وتجهيزها للحفظ
+    entities_list = []
+    for ent in raw_entities:
+        entities_list.append({
+            "type": ent.get("type"),
+            "offset": ent.get("offset"),
+            "length": ent.get("length"),
+            "custom_emoji_id": ent.get("custom_emoji_id")
+        })
+        
+    settings = load_settings()
+    settings["welcome_message"] = text
+    settings["welcome_entities"] = entities_list
+    save_settings(settings)
+    
+    bot.send_message(message.chat.id, "✅ تم حفظ رسالة الترحيب مع الإيموجي المميزة بنجاح يا فخم!", reply_markup=get_main_keyboard(ADMIN_ID))
 
 def save_new_buttons(message):
     if message.from_user.id != ADMIN_ID:
@@ -172,10 +211,10 @@ def save_new_buttons(message):
         settings["btn_invite"] = parts[2].strip()
         settings["btn_site"] = parts[3].strip()
         save_settings(settings)
-        bot.send_message(message.chat.id, "✅ <b>تم تحديث أسماء الأزرار والإيموجي المميزة بنجاح يا زعيم!</b>", parse_mode='HTML', reply_markup=get_main_keyboard(ADMIN_ID))
+        bot.send_message(message.chat.id, "✅ تم تحديث أسماء الأزرار بنجاح يا زعيم!", reply_markup=get_main_keyboard(ADMIN_ID))
     else:
-        bot.send_message(message.chat.id, "❌ الصيغة غير صحيحة. تأكد من إرسال 4 أسماء مفصولة بـ `,`.", parse_mode='HTML', reply_markup=get_main_keyboard(ADMIN_ID))
+        bot.send_message(message.chat.id, "❌ الصيغة غير صحيحة. تأكد من إرسال 4 أسماء مفصولة بـ `,`.", reply_markup=get_main_keyboard(ADMIN_ID))
 
 if __name__ == '__main__':
-    print(f"🤖 Bot with Custom Emoji support is running for {ADMIN_ID}...")
+    print(f"🤖 Bot with exact Custom Emoji Entities support is running for {ADMIN_ID}...")
     bot.infinity_polling()
