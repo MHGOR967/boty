@@ -25,7 +25,6 @@ CONFIG_FILE = "bot_config.json"
 DB_FILE = "fokhm_bot.db"
 WEBAPP_URL = "https://your-webapp-domain.com" # استبدله برابط موقعك على Render مثلاً fokhm.com
 
-# إعداد قاعدة البيانات
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -75,9 +74,6 @@ class AdminState(StatesGroup):
     waiting_for_welcome_message = State()
     waiting_for_buttons = State()
 
-class DonationState(StatesGroup):
-    waiting_for_amount = State()
-
 def load_config():
     if os.path.exists(CONFIG_FILE):
         try:
@@ -120,30 +116,22 @@ def get_main_keyboard():
     b = config["buttons"]
     builder = InlineKeyboardBuilder()
     
-    # السطر الأول: حقن وتلغيم تطبيق (مستقل لوحده)
     builder.row(types.InlineKeyboardButton(
         text=b.get("inject", "⚡ حقن وتلغيم تطبيق"),
         web_app=types.WebAppInfo(url=WEBAPP_URL)
     ))
-    
-    # السطر الثاني: معلومات حسابي + دعوة صديق
     builder.row(
         types.InlineKeyboardButton(text=b.get("account", "🥷 معلومات حسابي"), callback_data="my_account"),
         types.InlineKeyboardButton(text=b.get("invite", "🔗 دعوة صديق (ربح)"), callback_data="invite_friends")
     )
-    
-    # السطر الثالث: قسم VIP + مساعدة
     builder.row(
         types.InlineKeyboardButton(text=b.get("vip", "💎 قسم VIP"), callback_data="vip_section"),
         types.InlineKeyboardButton(text=b.get("help", "❓ مساعدة"), callback_data="help_section")
     )
-    
-    # السطر الرابع: تبرع للبوت
     builder.row(types.InlineKeyboardButton(
         text=b.get("donate", "⭐ تبرع للبوت"),
         callback_data="start_donation"
     ))
-    
     return builder.as_markup()
 
 def get_number_pad_keyboard(current_value="5"):
@@ -187,7 +175,6 @@ async def start_bot():
                 invited_by = int(args[1].replace("ref_", ""))
             except:
                 pass
-                
         add_user_to_db(user.id, user.username, user.first_name, invited_by)
         
         name = user.first_name
@@ -195,7 +182,6 @@ async def start_bot():
         try:
             await message.answer(welcome_text, reply_markup=get_main_keyboard())
         except Exception as e:
-            print(f"Error: {e}")
             await message.answer(welcome_text.replace("<tg-emoji", "").replace("</tg-emoji>", ""), reply_markup=get_main_keyboard())
 
     @dp.message(Command("admin"), F.from_user.id == ADMIN_ID)
@@ -245,7 +231,6 @@ async def start_bot():
         await state.clear()
         await admin_panel(message)
 
-    # نظام التبرع بالنجوم السريع والفوري
     @dp.callback_query(F.data == "start_donation")
     async def start_donation(callback_query: types.CallbackQuery, state: FSMContext):
         await state.update_data(donation_amount="5")
@@ -283,7 +268,6 @@ async def start_bot():
                 f"تتم عملية الدفع الآمن بقيمة <b>{amount}</b> نجمة (Telegram Stars) عبر تليجرام فوراً.",
                 reply_markup=get_main_keyboard()
             )
-            # إرسال فاتورة النجوم بشكل فوري وصاروخي بدون أي تأخير
             await bot.send_invoice(
                 chat_id=callback_query.message.chat.id,
                 title="تبرع لدعم منصة fokhm.com ⚡",
