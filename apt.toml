@@ -1,6 +1,0 @@
-packages = [
-    "build-essential",
-    "libffi-dev",
-    "libssl-dev"
-]
-
