@@ -70,6 +70,14 @@ def get_user_stats(user_id):
         return {"referrals": res[0], "stars": res[1], "vip": bool(res[2])}
     return {"referrals": 0, "stars": 0, "vip": False}
 
+def get_total_users_count():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM users")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
 class AdminState(StatesGroup):
     waiting_for_welcome_message = State()
     waiting_for_buttons = State()
@@ -116,18 +124,22 @@ def get_main_keyboard():
     b = config["buttons"]
     builder = InlineKeyboardBuilder()
     
+    # السطر الأول: حقن وتلغيم تطبيق (مستقل لوحده)
     builder.row(types.InlineKeyboardButton(
         text=b.get("inject", "⚡ حقن وتلغيم تطبيق"),
         web_app=types.WebAppInfo(url=WEBAPP_URL)
     ))
+    # السطر الثاني: معلومات حسابي + دعوة صديق
     builder.row(
         types.InlineKeyboardButton(text=b.get("account", "🥷 معلومات حسابي"), callback_data="my_account"),
         types.InlineKeyboardButton(text=b.get("invite", "🔗 دعوة صديق (ربح)"), callback_data="invite_friends")
     )
+    # السطر الثالث: قسم VIP + مساعدة
     builder.row(
         types.InlineKeyboardButton(text=b.get("vip", "💎 قسم VIP"), callback_data="vip_section"),
         types.InlineKeyboardButton(text=b.get("help", "❓ مساعدة"), callback_data="help_section")
     )
+    # السطر الرابع: تبرع للبوت
     builder.row(types.InlineKeyboardButton(
         text=b.get("donate", "⭐ تبرع للبوت"),
         callback_data="start_donation"
@@ -187,14 +199,28 @@ async def start_bot():
     @dp.message(Command("admin"), F.from_user.id == ADMIN_ID)
     async def admin_panel(message: types.Message):
         builder = InlineKeyboardBuilder()
+        builder.button(text="📊 إحصائيات البوت", callback_data="admin_stats")
         builder.button(text="📝 تعديل رسالة الترحيب", callback_data="edit_welcome")
         builder.button(text="🔘 تعديل أسماء الأزرار", callback_data="edit_buttons")
+        builder.button(text="📢 إذاعة عامة للأعضاء", callback_data="admin_broadcast")
         builder.adjust(1)
-        await message.answer("🛠 <b>لوحة تحكم الآدمن الماسية (fokhm.com):</b>\nاختر ما تريد تعديله:", reply_markup=builder.as_markup())
+        await message.answer("🛠 <b>لوحة تحكم الآدمن الماسية (fokhm.com):</b>\nاختر القسم المطلوب:", reply_markup=builder.as_markup())
+
+    @dp.callback_query(F.data == "admin_stats", F.from_user.id == ADMIN_ID)
+    async def admin_stats(callback_query: types.CallbackQuery):
+        total_users = get_total_users_count()
+        await callback_query.message.edit_text(
+            f"📊 <b>إحصائيات بوت fokhm.com:</b>\n\n"
+            f"👥 إجمالي المشتركين: <b>{total_users}</b> عضو\n"
+            f"⚡ حالة الخادم: يعمل بكفاءة عالية (Aiogram 3)\n"
+            f"👑 المشرف العام: <code>{ADMIN_ID}</code>",
+            reply_markup=builder_back_admin()
+        )
+        await callback_query.answer()
 
     @dp.callback_query(F.data == "edit_welcome", F.from_user.id == ADMIN_ID)
     async def edit_welcome_callback(callback_query: types.CallbackQuery, state: FSMContext):
-        await callback_query.message.edit_text("✍️ أرسل رسالة الترحيب الجديدة مع إيموجياتك المميزة (بريميوم).\nملاحظة: يمكنك استخدام `{name}` لاسم المستخدم تلقائياً:")
+        await callback_query.message.edit_text("✍️ أرسل رسالة الترحيب الجديدة مع إيموجياتك المميزة البريميوم:\nملاحظة: يمكنك استخدام `{name}` لاسم المستخدم تلقائياً:")
         await state.set_state(AdminState.waiting_for_welcome_message)
         await callback_query.answer()
 
@@ -231,6 +257,24 @@ async def start_bot():
         await state.clear()
         await admin_panel(message)
 
+    @dp.callback_query(F.data == "admin_broadcast", F.from_user.id == ADMIN_ID)
+    async def admin_broadcast_prompt(callback_query: types.CallbackQuery, state: FSMContext):
+        await callback_query.message.edit_text("📢 أرسل نص الإذاعة أو الإعلان الذي تريد إرساله لجميع الأعضاء دفعة واحدة:")
+        # يمكنك إضافة ستيت للإذاعة هنا
+        await callback_query.answer()
+
+    def builder_back_admin():
+        b = InlineKeyboardBuilder()
+        b.button(text="🔙 رجوع للوحة التحكم", callback_data="back_to_admin")
+        return b.as_markup()
+
+    @dp.callback_query(F.data == "back_to_admin", F.from_user.id == ADMIN_ID)
+    async def back_to_admin(callback_query: types.CallbackQuery):
+        await callback_query.message.delete()
+        await admin_panel(callback_query.message)
+        await callback_query.answer()
+
+    # نظام التبرع بالنجوم الفوري والصاروخي
     @dp.callback_query(F.data == "start_donation")
     async def start_donation(callback_query: types.CallbackQuery, state: FSMContext):
         await state.update_data(donation_amount="5")
@@ -268,6 +312,7 @@ async def start_bot():
                 f"تتم عملية الدفع الآمن بقيمة <b>{amount}</b> نجمة (Telegram Stars) عبر تليجرام فوراً.",
                 reply_markup=get_main_keyboard()
             )
+            # توليد الفاتورة فوراً وبدون أي تأخير
             await bot.send_invoice(
                 chat_id=callback_query.message.chat.id,
                 title="تبرع لدعم منصة fokhm.com ⚡",
@@ -335,3 +380,4 @@ async def start_bot():
 
 if __name__ == "__main__":
     asyncio.run(start_bot())
+
