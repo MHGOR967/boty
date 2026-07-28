@@ -13,11 +13,12 @@ SETTINGS_FILE = 'bot_settings.json'
 
 default_settings = {
     "welcome_message": "🏴‍☠️ أهلاً بك يا فخم في نظام g5wbot الماسي\n--------------------------------------------------\n🔥 بوابة تلغيم، تخصيص وتوقيع تطبيقات الاختراق والأمان باحترافية تامة.\n--------------------------------------------------\n⏳ حالة الحساب: مفعل ومؤمن بالكامل عبر منصة fokhm.com ⚡\n--------------------------------------------------\nاختر إحدى الخدمات أدناه للبدء فوراً:",
-    "welcome_entities": [], # لحفظ تفاصيل الإيموجي المميز والكيانات
+    "welcome_entities": [],
     "btn_inject": "⚡ حقن وتلغيم تطبيق",
     "btn_account": "🥷 حسابي وVIP",
     "btn_invite": "🔗 دعوة صديق (ربح)",
-    "btn_site": "🌐 موقع وهم فخم
+    "btn_site": "🌐 موقع وهم الرسمي"
+}
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -37,7 +38,6 @@ def dict_to_entities(ent_dicts):
         return None
     entities = []
     for ed in ent_dicts:
-        # بناء كائن MessageEntity بنفس هيكل تليجرام البرمجي
         ent = MessageEntity(
             type=ed.get('type'),
             offset=ed.get('offset'),
@@ -81,7 +81,6 @@ def send_welcome(message):
     
     personalized_msg = f"👋 أهلاً بك يا {first_name}!\n\n{welcome_text}"
     
-    # إرسال الرسالة مع دعم الـ custom_emoji entities الحقيقية تماماً كما طلبته
     try:
         bot.send_message(
             message.chat.id,
@@ -90,7 +89,6 @@ def send_welcome(message):
             reply_markup=get_main_keyboard(user_id)
         )
     except Exception:
-        # طريقة احتياطية في حال حدث أي خطأ بالكيانات
         bot.send_message(
             message.chat.id,
             personalized_msg,
@@ -179,11 +177,9 @@ def save_new_welcome(message):
     if message.from_user.id != ADMIN_ID:
         return
     
-    # استخراج النص والكيانات الأصلية (Entities) التي تحوي أيدي الملصق المميز
     text = message.text or message.caption or ""
     raw_entities = message.json.get('entities') or message.json.get('caption_entities') or []
     
-    # تنظيف الـ entities وتجهيزها للحفظ
     entities_list = []
     for ent in raw_entities:
         entities_list.append({
@@ -216,5 +212,5 @@ def save_new_buttons(message):
         bot.send_message(message.chat.id, "❌ الصيغة غير صحيحة. تأكد من إرسال 4 أسماء مفصولة بـ `,`.", reply_markup=get_main_keyboard(ADMIN_ID))
 
 if __name__ == '__main__':
-    print(f"🤖 Bot with exact Custom Emoji Entities support is running for {ADMIN_ID}...")
+    print(f"🤖 Bot with Custom Emoji entities support is running for {ADMIN_ID}...")
     bot.infinity_polling()
